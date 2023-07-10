@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from Menu import main_menu
 
 app = Flask(__name__)
 
@@ -189,4 +190,5 @@ def handle_person_enrollments(person_id):
         return jsonify(enrollment.__dict__), 201
 
 if __name__ == '__main__':
-    app.run(debug=True, port=3000)
+    main_menu()
+    
