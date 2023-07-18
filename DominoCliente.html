@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+canvas {
+    border:0px solid #d3d3d3;
+    margin:0px;
+    background-color: #f1f1f1;
+}
+body {
+    border:0px solid #d3d3d3;
+    margin:0px;
+    background-color: #f1f1f1;
+}
+</style>
+</head>
+<body><!--  -->
+    <canvas id="canvasGame" width="900" height="900"> </canvas>
+    <p id="mensajeinicial">Bienvenido</p>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+
+        var parrafo = document.getElementById("mensajeinicial"); 
+
+        const queryString = window.location.search;
+        const urlParams = new URLSearchParams(queryString);
+        const username = urlParams.get('username');
+        const token = urlParams.get('token');
+
+        var socket = io('http://localhost:3000');
+
+        socket.emit("connect-player",{
+            username,
+            token
+        });
+
+        socket.on("start-game",(partida)=>{
+            const jugador = partida.jugadores.find(jugador => jugador.username == username);
+            if(!jugador) return; //verifica si el jugador pertenece a la partida
+            // startGame(partida);
+        });
+        startGame(partida);
+        socket.on("made.move", ()=>{
+            //actualizar visualmente
+        })
+        
+        
+        var borrar = 1;
+        var seleccion = false;
+        var piezaJugar = -1;        
+        var accion = "no hacer nada";        
+        // variables de canvas globales
+        var ctxOffscreen;
+        
+        // Crear un array para almacenar las imágenes
+        var arrayImagesh = [];
+        var arrayImagesv = [];
+        
+        var arrayRutaNombres = []
+        // se crean todos los nombres de los archivos de piezas sin orientacion en un vector
+        const piezasN = [];
+        // se cargan todas piezas horizontales y verticales
+        var vect = [];
+        var mouseX =-1;
+        var mouseY =-1;
+        var totalImagenesh = 0;
+        var loadedImagenesh = 0;
+        var totalImagenesv = 0;
+        var loadedImagenesv = 0;
+        var piezasV=false;
+        var piezasH=false;
+        var imagenTablero;
+        var piezaVerticalV;
+        var piezaVerticalH;
+        var tableroListo=false;
+        var piezaVerticalHListo=false;
+        var piezaVerticalVListo=false;
+        var posColaX = 0;
+        var posCabezaX = 0;
+        var posColaY = 0;
+        var posCabezaY = 0;
+        var numCola = 0;
+        var numCabeza = 0;
+        var colaDir = -1;
+        var cabezaDir = 1;
+        var ultimaColaDoble = false;
+        var ultimaCabezaDoble = false;
+        var colaVuelta = false;
+        var cabezaVuelta = false;
+        var fichaDobleCola = false;
+        var fichaDobleCabeza = false;
+        var fichaAnteriorDobleCola = false;
+        var fichaAnteriorDobleCabeza = false;
+        // pre carga de imagenes
+        PreCarga();
+        
+        // event listeners
+        var canvasELF = false;
+        var canvasE = document.getElementById('canvasGame');
+        function canvasEL(event){
+
+            
+            //verificar si es el jugador actual
+            // socket.emit("make.move", ()=>{
+
+            // })
+
+
+            console.log("event listener cargado");
+            console.log(canvasELF);
+
+            if(canvasELF){
+                console.log("El usuario hizo clic en el canvas.");
+                mouseX = event.clientX;
+                mouseY = event.clientY;
+                console.log("mouseX" + mouseX);
+                console.log("mouseY" + mouseY);
+                for(var i=0; i<vect.length; i++){
+                    var x1 = myGamePieza[0][vect[i]].x;
+                    var y1 = myGamePieza[0][vect[i]].y;
+                    var x2 = x1 + myGamePieza[0][vect[i]].width;
+                    var y2 = y1 + myGamePieza[0][vect[i]].height;
+                    if(mouseX>x1 && mouseX<x2 && mouseY>y1 && mouseY<y2){
+                        pSelect = vect[i];
+                        
+                        break;
+                    }
+                }
+                // seleccionar en donde, de ser necesario
+                var ladoCulebra = -1; // por defecto la pone en la cola
+                if(numCola != numCabeza){
+                    var v1 = myGamePieza[0][pSelect].valor1;
+                    var v2 = myGamePieza[0][pSelect].valor2;
+                    if((v1 == numCola || v2 == numCola) && (v1 == numCabeza || v2 == numCabeza))    // hay que escoger en donde
+                    if(v1 == numCola || v2 == numCola)
+                        ladoCulebra = 1;
+               }
+                // busca la pieza entre las originales del jugador y la juega
+                for(var j = 0; j <piezasRepartidas[0].length; j++) {
+                    if(piezasRepartidas[0][j].nombre == myGamePieza[0][pSelect].pieza)
+                        break;
+                }
+                piezaJugar = j; 
+                accion = "Jugo";
+            }
+        }
+        // document.getElementById("miElemento").addEventListener("click", miEventListener);
+        canvasE.addEventListener("click", canvasEL);
+        
+        // fin event listeners
+        // tamaño de ventana windows y navegador
+        var winWidth = window.innerWidth;
+        var winHeight = window.innerHeight;
+        var screenH = screen.availHeight;
+        var screenW = screen.availWidth;
+        var relacionPantalla = screenH/screenW;
+        var canvasGame; // canvas del juego
+        var tableroSize; // tamaño ,aximo del tablero
+        if(winHeight > winWidth)
+            tableroSize  = winWidth;
+        else
+            tableroSize  =  winHeight;
+        
+        var escalaPieza = tableroSize/374/12; // escala para las piezas, estimando 12 horizontales max
+    
+
+
+
+    document.body.style.overflow = "hidden";    // suprime las scrolls bars
+
+    // variables globales
+    const puntosPartA = 0; // puntaje equipo A o Jugador A en la Partida actual
+    const puntosPartB = 0; // puntaje equipo B o Jugador B en la Partida actual
+    const puntosTotalA = 0; // puntaje total del equipo A o Jugador A en lodas las partidas jugadas
+    const puntosTotalB = 0; // puntaje total del equipo B o Jugador B en lodas las partidas jugadas
+    const inicioYo = false; // flag de que tengo o no la cochina
+    const pi = Math.PI; // 90 grados
+    var sangria = 6; // porcentaje  del tablero del borde a las piezas del jugador
+    var distPiezas = 4; // distancia de separacion entre piezas del jugador
+
+    var myGamePieza = [];     // matriz de piezas del juego ya repartidas
+    myGamePieza[0] = [];      // piezas del jugador 0, es la instancia
+    myGamePieza[1] = [];      // piezas del jugador 1, es el jugador a la derecha
+    myGamePieza[2] = [];      // piezas del jugador 2, es el jugador de enfrente, l compañero
+    myGamePieza[3] = [];      // piezas del jugador 3, es el jugador a la izquierda
+    var myGameCulebraIni ;        // pieza dek centro de la culebra
+    var myGameCulebraCola = []; // piezas del centro a la Cola de la culebra
+    var myGameCulebraCola = []; // piezas del centro a la Cola de la cola
+        
+
+    // ojo de llamarse desde un boton o un evento para que funcione. revisar
+    // window.resizeTo(tableroSize, tableroSize);
+
+    // de jugador listo al servidor
+    // comunicacion con el servidor esperando que todos los jugadores estan listos
+
+
+
+    const piezasRepartidas = [];  // matriz con las piezas repartidas
+    
+    piezasRepartidas[0] = [];      // el jugador 0, es la instancia
+    piezasRepartidas[1] = [];      // el jugador 1, es el jugador a la derecha
+    piezasRepartidas[2] = [];      // el jugador 2, es el jugador de enfrente, l compañero
+    piezasRepartidas[3] = [];      // el jugador 3, es el jugador a la izquierda
+   
+    // solo para debug estatico
+
+    piezasRepartidas[0] = [ { nombre: "06", pos: 6 }, { nombre: "44", pos: 22 }, { nombre: "02", pos: 2 },
+                            { nombre: "46", pos: 24 }, { nombre: "02", pos: 2 }, { nombre: "05", pos: 5 },
+                            { nombre: "22", pos: 13 }];
+    piezasRepartidas[1] = [ { nombre: "00", pos: 0  }, { nombre: "45", pos: 23 }, { nombre: "16", pos: 12 },
+                            { nombre: "66", pos: 27 }, { nombre: "35", pos: 20 }, { nombre: "24", pos: 15 },
+                            { nombre: "04", pos: 4 }];      // el jugador 1, es el jugador a la derecha
+    piezasRepartidas[2] = [ { nombre: "11", pos: 7 }, { nombre: "36", pos: 21 }, { nombre: "13", pos: 9 },
+                            { nombre: "15", pos: 11 }, { nombre: "46", pos: 24 }, { nombre: "25", pos: 16 },
+                            { nombre: "23", pos: 14 }];      // el jugador 2, es el jugador de enfrente, l compañero
+    piezasRepartidas[3] = [ { nombre: "12", pos: 8 }, { nombre: "14", pos: 10 }, { nombre: "03", pos: 3 },
+                            { nombre: "34", pos: 19 }, { nombre: "56", pos: 26 }, { nombre: "55", pos: 25 },
+                            { nombre: "01", pos: 1 }];      // el jugador 3, es el jugador a la izquierda
+    
+ 
+    function PiezaNN(nombre, pos){
+        this.nombre = nombre;
+        this.pos =pos;
+    }
+ 
+
+
+    function PreCarga(){
+        for (let i = 0; i < 7; i++)
+                for (let j = i; j < 7; j++) {
+                    var nombre = i.toString()+j.toString();
+                    var pieza = new PiezaNN(nombre, totalImagenesh);
+                    piezasN.push(pieza); // 00,01,02.....56,66
+                    arrayImagesh[totalImagenesh] = new Image(); // 00h,01h,02h....56h,66h
+                    arrayImagesh[totalImagenesh].src = "https://domino-work.s3.amazonaws.com/images/"+nombre+"h.png";
+                    
+                    arrayImagesh[totalImagenesh++].onload = function() {
+                        loadedImagenesh++;
+                        if (loadedImagenesh == arrayImagesh.length) {
+                        // Todas las imágenes se han cargado, dibujarlas en el lienzo
+                            piezasH = true;
+                        }
+                    };
+                    
+                    // verticales
+                    arrayImagesv[totalImagenesv] = new Image(); // 00h,01v,02v....56v,66v
+                    arrayImagesv[totalImagenesv].src = "https://domino-work.s3.amazonaws.com/images/"+nombre+"v.png";
+                    // arrayImagesh.push(im);
+                    arrayImagesv[totalImagenesv++].onload = function() {
+                        loadedImagenesv++;
+                        if (loadedImagenesv == arrayImagesv.length) {
+                        // Todas las imágenes se han cargado, dibujarlas en el lienzo
+                            piezasH = true;
+                        };
+                    }
+                }   
+   
+        // se cargan las piezas del los otros jugadores (no se ven) y el tablero
+        // imagenes cargadas:
+        // arrayImagesh -> arreglo de las piezas horizontales
+        // arrayImagesv -> arreglo de las piezas verticales
+        // imagenTablero -> imagen del tablero
+        // piezaVerticalH -> imagen de las piezas que no soy yo horizontal
+        // piezaVerticalV -> imagen de las piezas que no soy yo vertical
+        
+        
+        imagenTablero = new Image();
+        piezaVerticalV = new Image();
+        piezaVerticalH = new Image();
+        tableroListo=false;
+        piezaVerticalHListo=false;
+        piezaVerticalVListo=false;
+        imagenTablero.src = "https://domino-work.s3.amazonaws.com/tabla.jpg";
+        piezaVerticalH.src = "https://domino-work.s3.amazonaws.com/verticalh.png";
+        piezaVerticalV.src = "https://domino-work.s3.amazonaws.com/verticalv.png";
+        
+        imagenTablero.onload = function() {
+            tableroListo=true;
+        };
+        piezaVerticalH.onload = function() {
+            piezaVerticalHListo=true;
+        };
+        piezaVerticalV.onload = function() {
+            piezaVerticalVListo=true;
+        };
+}
+
+
+    // solo para pruebas las reparto aleatoriamente
+    // esta info se debe recibir del servidor, ya que se recibe las piezas de cada jugador
+    // listo
+    /*
+    for(let i = 0; i < 4; i++)
+        for(let j = 0; j < 7; j++){
+            var np = Math.floor(Math.random() * piezasN.length);
+            // np = 27-(i*6+j);
+            piezasRepartidas[i][j] = piezasN[np];
+            if(j==0 && piezasN[np] == "66" && puntosTotalA == 0 && puntosTotalB == 0)
+                empiezoYo = true; // tengo la cochina 66
+            piezasN.splice(np, 1); // Elimina el elemento en el índice np (solo 1 )
+        }
+    */    
+        
+    // orden del servidor empezar del servidor cuando todos los jugadores esten listos 
+    // a partir de aqui empieza startGame y se juega desde ahi
+ 
+
+
+function startGame(partida) {
+    // arrayImagesh -> arreglo de las piezas horizontales
+    // arrayImagesv -> arreglo de las piezas verticales
+    // imagenTablero -> imagen del tablero
+    // piezaVerticalH -> imagen de las piezas que no soy yo horizontal
+    // piezaVerticalV -> imagen de las piezas que no soy yo vertical
+    // inicializa tablero
+    myGameBoard = new component("99", tableroSize, tableroSize,
+             imagenTablero, 0, 0, "image", 0,0); // /escalaPieza
+
+    // inicializa piezas
+    for(let i = 0; i < 4; i++){
+        if(i==0){ // yo, la instancia
+            var inicioX = (tableroSize - ( 7 * 208*escalaPieza + 6 * distPiezas))/2;//-208*escalaPieza+ tableroSize/100;
+            var inicioY = tableroSize - tableroSize*sangria/100 -374*escalaPieza-tableroSize/100;
+            var dx = 208*escalaPieza + distPiezas;
+            var dy = 0;
+            var orient = "v";
+        }
+        if(i==1){ // el que sigue a la derecha
+            var inicioX = tableroSize - tableroSize*sangria/100 - tableroSize/100 - 75*escalaPieza;
+            var inicioY = tableroSize - (tableroSize - ( 7 * 208*escalaPieza + 6 * distPiezas))/2 - 208*escalaPieza;
+            var dx = 0;
+            var dy = -208*escalaPieza - distPiezas;
+            var orient = "h";
+        }
+        if(i==2){ // mi compañero de enfrente
+            var inicioX = tableroSize - (tableroSize - ( 7 * 208*escalaPieza + 6 * distPiezas))/2 - 208*escalaPieza;
+            var inicioY = tableroSize*sangria/100 + tableroSize/100;
+            var dx = -208*escalaPieza - distPiezas;
+            var dy = 0;
+            var orient = "v";
+        }
+        if(i==3){ // el anterior a mi, a la izquierda
+            var inicioX = tableroSize/100 + tableroSize*sangria/100 ;
+            var inicioY = (tableroSize - ( 7 * 208*escalaPieza + 6 * distPiezas))/2;
+            var dx = 0;
+            var dy = +208*escalaPieza + distPiezas;
+            var orient = "h";
+
+        }
+        // crea componentes de todas las piezas
+        //var l = piezasRepartidas[i].length;
+        for(let j = 0; j < 7; j++){
+            if(i==0){
+                piezaAMostrar = "https://domino-work.s3.amazonaws.com/images/"+piezasRepartidas[i][j]+orient+".png";
+                //var f = new Pieza(piezaAMostrar,0,0,i,j,0,0,0,0,0);
+                
+                myGamePieza[i][j] = new component(piezasRepartidas[i][j].nombre, 208*escalaPieza, 374*escalaPieza, 
+                arrayImagesv[piezasRepartidas[i][j].pos], inicioX + dx*j, inicioY + dy*j, "image", 0,0);
+            }
+            else if(i==2){
+                piezaAMostrar = piezaVerticalV;
+                myGamePieza[i][j] = new component(piezasRepartidas[i][j].nombre, 208*escalaPieza, 75*escalaPieza, piezaAMostrar, inicioX + dx*j, inicioY + dy*j, "image", 0,0);
+            }
+            else{
+                piezaAMostrar = piezaVerticalH;
+                // piezaAMostrar = arrayImagesv[piezasRepartidas[i][j].pos];
+                myGamePieza[i][j] = new component(piezasRepartidas[i][j].nombre, 75*escalaPieza, 208*escalaPieza, piezaAMostrar, inicioX + dx*j, inicioY + dy*j, "image", 0,0);
+            }
+        }
+    }
+    
+    myGameArea();
+}
+
+
+window.addEventListener('resize', function(event){ /// ojo esto hay que revisarlo
+    var winW = window.innerWidth;
+    var winH = window.innerHeight;
+    console.log("resize detectado");
+    if(winH/winW >relacionPantalla){
+        winH = winW*relacionPantalla;
+    }
+    else{
+        winW = winH/relacionPantalla;
+
+    }
+    window.resizeTo(winH, winW);
+    winWidth = window.innerWidth;
+    winHeight = window.innerHeight;
+    if(winHeight > winWidth)
+            tableroSize  = winWidth;
+        else
+            tableroSize  =  winHeight;
+        
+    escalaPieza = tableroSize/374/12; // escala para las piezas, estimando 12 horizontales
+
+});
+
+
+function myGameArea() {
+    
+    //obtener position del mouse
+    //verificas donde dio click/
+    //actualizar eventos basado en 
+    Redibujar();
+    switch (accion) {
+        case "Jugar":
+            canvasELF=true;
+            break;
+        case "Jugo":
+            canvasELF=false;
+            var vecto=BuscarPiezaAJugar(0);
+            vect = vecto;
+            Redibujar();
+            MostrarJugar(vecto);
+            break;
+        case "no hacer nada":
+        default:
+            break;
+    }
+  
+
+
+    animationId = requestAnimationFrame(myGameArea);
+    
+    
+    /*
+    JugarPieza(0,0,0); // 0 1
+    Redibujar();
+    var pP=BuscarPiezaAJugar(1);    // -1 para todas las piezas, otro numero solo las posibles
+    Redibujar();
+    JugarPieza(0,1,-1)
+    Redibujar();
+    var pP=BuscarPiezaAJugar(1);    // -1 para todas las piezas, otro numero solo las posibles
+    Redibujar();
+    JugarPieza(0,1,1)
+    Redibujar();
+    //MostrarJugar(pP);
+    /*
+    
+    JugarPieza(0,0,-1); // 0 2
+    Redibujar();
+    JugarPieza(0,0,1); // 0 3
+    Redibujar();
+    JugarPieza(0,0,-1); // 0 4
+    Redibujar();
+    JugarPieza(0,0,1); // 0 5
+    Redibujar();
+    JugarPieza(0,0,-1);// 0 6
+    Redibujar();
+    JugarPieza(0,0,1);// 0 7
+    Redibujar();
+    JugarPieza(1,0,1);// 1 1
+    Redibujar();
+    JugarPieza(1,0,-1);// 1 2
+    Redibujar();
+    JugarPieza(1,0,1);// 1 3
+    Redibujar();
+    JugarPieza(1,0,-1);// 1 4
+    Redibujar();
+    JugarPieza(1,0,1);// 1 5
+    Redibujar();
+    JugarPieza(1,0,-1);// 1 6
+    Redibujar();
+    JugarPieza(1,0,1);// 1 7
+    Redibujar();
+    JugarPieza(2,0,1);// 2 1
+    Redibujar();
+    JugarPieza(2,0,-1);// 2 2
+    Redibujar();
+    JugarPieza(2,0,1);// 2 3
+    Redibujar();
+    JugarPieza(2,0,-1);// 2 4
+    Redibujar();
+    JugarPieza(2,0,1);// 2 5
+    Redibujar();
+    JugarPieza(3,0,-1);
+    Redibujar();
+    JugarPieza(3,0,1);
+    Redibujar();
+    */
+}
+
+function Redibujar() {
+    // Crear un lienzo off-screen
+    var canvasOffscreen = document.createElement('canvas');
+    // Dibujar en el lienzo off-screen
+    canvasOffscreen.width = winWidth;   //device-width
+    canvasOffscreen.height = winWidth;  //device-height
+    ctxOffscreen = canvasOffscreen.getContext('2d');
+  
+    updateGameArea();
+    
+    canvasOnscreen = document.getElementById('canvasGame');
+
+    // Presentar el lienzo listo en la pantalla
+    canvasOnscreen.width = winWidth;   //device-width
+    canvasOnscreen.height = winWidth;  //device-height
+    var ctxOnscreen = canvasOnscreen.getContext('2d');
+    ctxOnscreen.drawImage(canvasOffscreen, 0, 0);
+}
+
+function MostrarJugar(vect) {
+  
+    var canvas = document.getElementById("canvasGame");
+
+    var jugador = 0;
+    for(var i=0; i<vect.length; i++){
+        myGamePieza[0][vect[i]].jugable=vect[i];
+    }
+    // para borrarmyGamePieza[0][cur].jugable=0;
+
+    Redibujar();
+    
+    var pSelect = SeleccionarPieza(vect);
+    //JugarPieza(0,pSelect,-1/*ladoCulebra*/);// 2 3
+    
+}
+
+function SeleccionarPieza(vect){
+    
+    //if(!seleccion)
+    //   cancelAnimationFrame(MostrarJugar);
+    // animationId = requestAnimationFrame(SeleccionarPieza(vect));
+    
+}
+
+function BuscarPiezaAJugar(inicio) {
+
+    var jugador = 0;
+    var piezasPosibles = [];
+    var v1=-1;
+    var v2=-1;
+    if(inicio==-1){
+        return [0,1,2,3,4,5,6];
+    }
+    var k2=0;
+    for(var i=0; i<7; i++)
+        myGamePieza[jugador][i].jugable=0;    
+    for(var i=0; i<piezasRepartidas[jugador].length; i++)
+        for(var k=k2; k<7; k++){
+            if(piezasRepartidas[jugador][i].nombre==myGamePieza[jugador][k].pieza){
+                k2=k;
+                v1=piezasRepartidas[jugador][i].nombre[0];
+                v2=piezasRepartidas[jugador][i].nombre[1];
+                
+                if(numCola == v1 || numCola == v2){
+                    piezasPosibles.push(k);
+                    myGamePieza[jugador][k].jugable = 1;
+                }
+                else if(numCabeza == v1 || numCabeza == v2){
+                    piezasPosibles.push(k); // son relativas a las originales
+                    myGamePieza[jugador][k].jugable = 1;
+                }
+                else
+                    myGamePieza[jugador][k].jugable = 0;
+                break;
+            }
+        }
+    return piezasPosibles;
+}
+
+function JugarPieza(jugador, numPieza, ladoCulebra){ // -1 cola, 0 cuerpo y 1 Cola
+                  // 0...3    # pieza en la mano
+    fichaDobleCabeza=false;
+    // colaDir = ladoCulebra;
+    var piezaJugada=-1;
+    var j=0;
+    pos = piezasRepartidas[jugador][numPieza].pos;
+    for(j = 0; j <7; j++) {
+        if(myGamePieza[jugador][j].pieza == piezasRepartidas[jugador][numPieza].nombre){
+            piezaJugada = myGamePieza[jugador][j];
+            if(jugador>0){
+                myGamePieza[jugador][j].width = 374*escalaPieza;
+                myGamePieza[jugador][j].height = 208*escalaPieza;
+                myGamePieza[jugador][j].Image = arrayImagesh[pos];
+            }
+            break;
+        }
+    }
+    if(piezaJugada==-1)
+        console.log('Error');
+
+    piezasRepartidas[jugador].splice(numPieza, 1); // elimina la pieza de la mano
+    // myGamePieza[jugador].splice(np, 1); // elimina la pieza de la mano con datos de posicion
+
+
+    if(ladoCulebra==0){
+        myGameCulebraIni = piezaJugada;
+        if(myGameCulebraIni.valor1 == myGameCulebraIni.valor2){ //vertical
+            myGamePieza[jugador][j].Image = arrayImagesv[pos];
+            myGamePieza[jugador][j].x = tableroSize/2 - 208*escalaPieza/2;
+            myGamePieza[jugador][j].y = tableroSize/2 - 374*escalaPieza/2
+            posCabezaX = tableroSize/2 + 208*escalaPieza/2;
+            posCabezaY = tableroSize/2 - 208*escalaPieza/2;
+            posColaX = tableroSize/2 - 208*escalaPieza/2;
+            posColaY = tableroSize/2 - 208*escalaPieza/2;
+            numCola = myGameCulebraIni.valor1; 
+            numCabeza = myGameCulebraIni.valor2;
+        }
+        else{   // horizontal
+            myGamePieza[jugador][j].Image = arrayImagesh[pos];
+            myGamePieza[jugador][j].x = tableroSize/2 - 374*escalaPieza/2;
+            myGamePieza[jugador][j].y = tableroSize/2 - 208*escalaPieza/2
+            var temp = myGameCulebraIni.height;
+            myGamePieza[jugador][j].height = myGameCulebraIni.width;
+            myGamePieza[jugador][j].width = temp;
+            posCabezaX = tableroSize/2 + 374*escalaPieza/2;
+            posCabezaY = tableroSize/2 - 208*escalaPieza/2;
+            posColaX = tableroSize/2 - 374*escalaPieza/2;;
+            posColaY = tableroSize/2 - 208*escalaPieza/2;
+            numCola = myGameCulebraIni.valor1; 
+            numCabeza = myGameCulebraIni.valor2;
+        }
+    }
+    else if(ladoCulebra==-1){   // cola izquierda inicialmente
+        myGameCulebraCola = piezaJugada;
+        numCola
+
+        var doble = false;
+        var vertical = false;
+        var x = posColaX + colaDir*(374*escalaPieza+10); // para ver si se llego al limite y hay que bajar
+        
+        var ColaIzqLimite=false;
+        var ColaDerLimite=false;
+        var bajar=false;
+        fichaDobleCola = false;
+        if(x < (sangria+474)*escalaPieza && colaDir==-1){
+            vertical = true;
+            bajar=true;
+            ColaIzqLimite=true;
+        }
+        if(x > tableroSize-(sangria+474)*escalaPieza && colaDir==1){
+            vertical = true;
+            bajar=true;
+            ColaDerLimite=true;
+        }
+        //if(vertical && ultimaColaDoble)
+        //    subir=true;
+        if(myGameCulebraCola.valor1 == myGameCulebraCola.valor2)
+        {
+            fichaDobleCola = true;
+            doble=true;
+            vertical = true;
+        }
+      
+        if(colaVuelta){
+            fichaDobleCola = true;
+            vertical= false;
+            doble=false;
+            bajar=false;
+            colaVuelta = false;
+        }
+
+        if(vertical) {
+            myGamePieza[jugador][j].Image = arrayImagesv[pos];
+            myGamePieza[jugador][j].height = 374*escalaPieza;
+            myGamePieza[jugador][j].width = 208*escalaPieza;
+            // si es vertical, es un doble o se baja
+            // ver si hay que rotarla, aqui se baja o es un doble vertical
+            
+            var vr1 = myGamePieza[jugador][j].valor1;
+            var vr2 = myGamePieza[jugador][j].valor2;
+            if(numCola==vr2){    // rotar
+                myGamePieza[jugador][j].rotar = 1;
+                numCola=vr1;
+            }
+            else{
+                myGamePieza[jugador][j].rotar = 0;
+                numCola=vr2;
+            }
+
+
+            if(doble){
+                if(bajar){  // doble
+                    if(colaDir==1){
+                        myGamePieza[jugador][j].x = posColaX - 208*escalaPieza;
+                        myGamePieza[jugador][j].y = posColaY + 208*escalaPieza;
+                        posColaX = myGamePieza[jugador][j].x + 208*escalaPieza;
+                        posColaY = myGamePieza[jugador][j].y + 374*escalaPieza;
+                        colaDir=-1;
+                    }
+                    else{
+                        myGamePieza[jugador][j].x = posColaX;
+                        myGamePieza[jugador][j].y = posColaY +208*escalaPieza;
+                        posColaX = myGamePieza[jugador][j].x;
+                        posColaY = myGamePieza[jugador][j].y + 374*escalaPieza;
+                        colaDir=1;
+                    }
+                }
+                else{   // doble
+                    ultimaColaDoble = true;
+                    if(colaDir==1){
+                        myGamePieza[jugador][j].x = posColaX;
+                        myGamePieza[jugador][j].y = posColaY + 208*escalaPieza/2 - 374*escalaPieza/2;
+                        posColaX = myGamePieza[jugador][j].x + 208*escalaPieza;
+                        // posColaY = myGamePieza[jugador][j].y + 374*escalaPieza/2-208*escalaPieza/2;
+                    }
+                    else{
+                        myGamePieza[jugador][j].x = posColaX - 208*escalaPieza;
+                        myGamePieza[jugador][j].y = posColaY + 208*escalaPieza/2 - 374*escalaPieza/2;
+                        posColaX = myGamePieza[jugador][j].x;
+                        posColaY = myGamePieza[jugador][j].y -208*escalaPieza/2 + 374*escalaPieza/2;
+                    }
+                }
+                if(fichaAnteriorDobleCola && (ColaDerLimite || ColaIzqLimite)){
+                    myGamePieza[jugador][j].y -= (374-208)*escalaPieza/2;
+                    posColaY -= (374-208)*escalaPieza/2;       
+                }
+
+            }
+            else { // no es doble
+                if(bajar){
+                    if(colaDir==1){
+                        myGamePieza[jugador][j].x = posColaX - 208*escalaPieza;
+                        myGamePieza[jugador][j].y = posColaY + 208*escalaPieza;
+                        posColaX = myGamePieza[jugador][j].x + 208*escalaPieza;
+                        posColaY = myGamePieza[jugador][j].y + 374*escalaPieza;
+                        colaDir=-1; colaVuelta = true;
+
+                    }
+                    else{
+                        myGamePieza[jugador][j].x = posColaX;
+                        myGamePieza[jugador][j].y = posColaY  +208*escalaPieza;
+                        posColaX = myGamePieza[jugador][j].x;
+                        posColaY = myGamePieza[jugador][j].y + 378*escalaPieza;
+                        colaDir=+1; colaVuelta = true;
+
+                    }
+                }
+                else{
+                    if(colaDir==1){
+                        myGamePieza[jugador][j].x = posColaX;
+                        myGamePieza[jugador][j].y = posColaY-374*escalaPieza/2;
+                        if(ColaDerLimite){
+                            posColaX = myGamePieza[jugador][j].x+208*escalaPieza;
+                            posColaY = myGamePieza[jugador][j].y - 374*escalaPieza;
+                            //colaDir = -1;
+                        }
+                    }
+                    else{
+                        myGamePieza[jugador][j].x = posColaX;
+                        myGamePieza[jugador][j].y = posColaY - 374*escalaPieza;
+                        if(ColaIzqLimite){
+                            posColaX = myGamePieza[jugador][j].x;
+                            posColaY = myGamePieza[jugador][j].y - 374*escalaPieza;
+                            colaDir = +1;
+                        }
+                    }
+                }
+                if(fichaAnteriorDobleCola && (ColaDerLimite || ColaIzqLimite)){
+                    myGamePieza[jugador][j].y += (374-208)*escalaPieza/2;                      
+                    posColaY += (374-208)*escalaPieza/2;       
+                }
+            }
+        }
+        else{   // horizontal
+            myGamePieza[jugador][j].Image = arrayImagesh[pos];
+            myGamePieza[jugador][j].height = 208*escalaPieza;
+            myGamePieza[jugador][j].width = 374*escalaPieza;
+            
+            // si es horizontal puede ser cualquier pieza
+            // ver si hay que rotarla
+            var vr1 = myGamePieza[jugador][j].valor1;
+            var vr2 = myGamePieza[jugador][j].valor2;
+            if(colaDir==1){
+                if(numCola==vr2){    // rotar
+                myGamePieza[jugador][j].rotar = 1;
+                numCola=vr1;
+                }
+                else{
+                    myGamePieza[jugador][j].rotar = 0;
+                    numCola=vr2;
+                }
+            }
+            else{
+                if(numCola==vr1){    // rotar
+                    myGamePieza[jugador][j].rotar = 1;
+                    numCola=vr2;
+                }
+                else{
+                    myGamePieza[jugador][j].rotar = 0;
+                    numCola=vr1;
+                }
+            }
+
+
+            if(colaDir==1){
+                myGamePieza[jugador][j].x = posColaX;
+                myGamePieza[jugador][j].y = posColaY;
+                posColaX = myGamePieza[jugador][j].x + 374*escalaPieza;
+                posColaY = myGamePieza[jugador][j].y;
+                if(colaVuelta && ultimaColaDoble){
+                    // posColaY -= (374-208)*escalaPieza/2;
+                    colaVuelta = false;
+                    ultimaColaDoble = false;
+                }
+            }
+            else {
+                myGamePieza[jugador][j].x = posColaX - 374*escalaPieza;
+                myGamePieza[jugador][j].y = posColaY;
+                posColaX = myGamePieza[jugador][j].x;
+                posColaY = myGamePieza[jugador][j].y;
+                if(colaVuelta && ultimaColaDoble){
+                    posColaY -= (374-208)/2;
+                    colaVuelta = false;
+                    ultimaColaDoble = false;
+                }
+            }
+        }
+        if(fichaDobleCola)
+            fichaAnteriorDobleCola = true;
+        else
+            fichaAnteriorDobleCola = false;
+    }
+    else if(ladoCulebra==1){   // Cabeza derecha inicialmente
+        myGameCulebraCabeza = piezaJugada;
+        
+
+        var doble = false;
+        var vertical = false;
+        var x = posCabezaX + cabezaDir*(374*escalaPieza+10); // para ver si se llego al limite y hay que subir
+        
+        var CabezaIzqLimite=false;
+        var CabezaDerLimite=false;
+        var subir=false;
+        fichaDobleCabeza=false; // ojo comprobar
+        if(x < (sangria+474)*escalaPieza && cabezaDir==-1){
+            vertical = true;
+            subir=true;
+            CabezaIzqLimite=true;
+        }
+        if(x > tableroSize-(sangria+474)*escalaPieza && cabezaDir==1){
+            vertical = true;
+            subir=true;
+            CabezaDerLimite=true;
+        }
+        //if(vertical && ultimaCabezaDoble)
+        //    subir=true;
+        if(myGameCulebraCabeza.valor1 == myGameCulebraCabeza.valor2)
+        {
+            fichaDobleCabeza = true;
+            doble=true;
+            vertical = true;
+        }
+      
+        if(cabezaVuelta){
+            fichaDobleCabeza = true;
+            vertical= false;
+            doble=false;
+            subir=false;
+            cabezaVuelta = false;
+        }
+
+        if(vertical) {
+            myGamePieza[jugador][j].Image = arrayImagesv[pos];
+            myGamePieza[jugador][j].height = 374*escalaPieza;
+            myGamePieza[jugador][j].width = 208*escalaPieza;
+
+            // si es vertical, es un doble o se sube
+            // ver si hay que rotarla, aqui se baja o es un doble vertical
+            
+            var vr1 = myGamePieza[jugador][j].valor1;
+            var vr2 = myGamePieza[jugador][j].valor2;
+            if(numCabeza==vr1){    // rotar
+                myGamePieza[jugador][j].rotar = 1;
+                numCabeza=vr2;
+            }
+            else{
+                myGamePieza[jugador][j].rotar = 0;
+                numCabeza=vr1;
+            }
+            
+            if(doble){
+                if(subir){  // doble
+                    if(cabezaDir==1){
+                        myGamePieza[jugador][j].x = posCabezaX - 208*escalaPieza;
+                        myGamePieza[jugador][j].y = posCabezaY - 374*escalaPieza;
+                        posCabezaX = myGamePieza[jugador][j].x + 208*escalaPieza;
+                        posCabezaY = myGamePieza[jugador][j].y - 208*escalaPieza;
+                        cabezaDir=-1;
+                    }
+                    else{
+                        myGamePieza[jugador][j].x = posCabezaX;
+                        myGamePieza[jugador][j].y = posCabezaY -374*escalaPieza;
+                        posCabezaX = myGamePieza[jugador][j].x;
+                        posCabezaY = myGamePieza[jugador][j].y - 208*escalaPieza;
+                        cabezaDir=1;
+                    }
+                }
+                else{   // doble
+                    ultimaCabezaDoble = true;
+                    if(cabezaDir==1){
+                        myGamePieza[jugador][j].x = posCabezaX;
+                        myGamePieza[jugador][j].y = posCabezaY + 208*escalaPieza/2 - 374*escalaPieza/2;
+                        posCabezaX = myGamePieza[jugador][j].x + 208*escalaPieza;
+                        posCabezaY = myGamePieza[jugador][j].y + 374*escalaPieza/2-208*escalaPieza/2;
+                    }
+                    else{
+                        myGamePieza[jugador][j].x = posCabezaX - 208*escalaPieza;
+                        myGamePieza[jugador][j].y = posCabezaY + 208*escalaPieza/2 - 374*escalaPieza/2;
+                        posCabezaX = myGamePieza[jugador][j].x;
+                        posCabezaY = myGamePieza[jugador][j].y -208*escalaPieza/2 + 374*escalaPieza/2;
+                    }
+                }
+                if(fichaAnteriorDobleCabeza && (CabezaDerLimite || CabezaIzqLimite)){
+                    myGamePieza[jugador][j].y -= (374-208)*escalaPieza/2;
+                    posCabezaY -= (374-208)*escalaPieza/2;       
+                }
+            }
+            else { // no es doble
+                if(subir){
+                    if(cabezaDir==1){
+                        myGamePieza[jugador][j].x = posCabezaX - 208*escalaPieza;
+                        myGamePieza[jugador][j].y = posCabezaY - 374*escalaPieza;
+                        posCabezaX = myGamePieza[jugador][j].x + 208*escalaPieza;
+                        posCabezaY = myGamePieza[jugador][j].y - 208*escalaPieza;
+                        cabezaDir=-1; cabezaVuelta = true;
+
+                    }
+                    else{
+                        myGamePieza[jugador][j].x = posCabezaX;
+                        myGamePieza[jugador][j].y = posCabezaY - 374*escalaPieza;
+                        posCabezaX = myGamePieza[jugador][j].x;
+                        posCabezaY = myGamePieza[jugador][j].y - 208*escalaPieza;
+                        cabezaDir=+1; cabezaVuelta = true;
+
+                    }
+                }
+                else{
+                    if(cabezaDir==1){
+                        myGamePieza[jugador][j].x = posCabezaX;
+                        myGamePieza[jugador][j].y = posCabezaY-374*escalaPieza/2;
+                        if(CabezaDerLimite){
+                            posCabezaX = myGamePieza[jugador][j].x+208*escalaPieza;
+                            posCabezaY = myGamePieza[jugador][j].y - 374*escalaPieza;
+                            //cabezaDir = -1;
+                        }
+                    }
+                    else{
+                        myGamePieza[jugador][j].x = posCabezaX;
+                        myGamePieza[jugador][j].y = posCabezaY - 374*escalaPieza;
+                        if(CabezaIzqLimite){
+                            posCabezaX = myGamePieza[jugador][j].x;
+                            posCabezaY = myGamePieza[jugador][j].y - 374*escalaPieza;
+                            cabezaDir = +1;
+                        }
+                    }
+                }
+                if(fichaAnteriorDobleCabeza && (CabezaDerLimite || CabezaIzqLimite)){
+                    myGamePieza[jugador][j].y -= (374-208)*escalaPieza/2;                      
+                    posCabezaY -= (374-208)*escalaPieza/2;       
+                }
+            }
+        }
+        else{   // horizontal
+            myGamePieza[jugador][j].Image = arrayImagesh[pos];
+            myGamePieza[jugador][j].height = 208*escalaPieza;
+            myGamePieza[jugador][j].width = 374*escalaPieza;
+                        // si es horizontal puede ser cualquier pieza
+            // ver si hay que rotarla
+            var vr1 = myGamePieza[jugador][j].valor1;
+            var vr2 = myGamePieza[jugador][j].valor2;
+            if(cabezaDir==1){
+                if(numCabeza==vr2){    // rotar
+                myGamePieza[jugador][j].rotar = 1;
+                numCabeza=vr1;
+                }
+                else{
+                    myGamePieza[jugador][j].rotar = 0;
+                    numCabeza=vr2;
+                }
+            }
+            else{
+                if(numCola==vr1){    // rotar
+                    myGamePieza[jugador][j].rotar = 1;
+                    numCola=vr2;
+                }
+                else{
+                    myGamePieza[jugador][j].rotar = 0;
+                    numCola=vr1;
+                }
+            }
+
+
+            if(cabezaDir==1){
+                myGamePieza[jugador][j].x = posCabezaX;
+                myGamePieza[jugador][j].y = posCabezaY;
+                posCabezaX = myGamePieza[jugador][j].x + 374*escalaPieza;
+                posCabezaY = myGamePieza[jugador][j].y;
+                if(cabezaVuelta && ultimaCabezaDobleCabeza){
+                    // posCabezaY -= (374-208)*escalaPieza/2;
+                    cabezaVuelta = false;
+                    ultimaCabezaDobleCabeza = false;
+                }
+            }
+            else {
+                myGamePieza[jugador][j].x = posCabezaX - 374*escalaPieza;
+                myGamePieza[jugador][j].y = posCabezaY;
+                posCabezaX = myGamePieza[jugador][j].x;
+                posCabezaY = myGamePieza[jugador][j].y;
+                if(cabezaVuelta && ultimaCabezaDobleCabeza){
+                    posCabezaY -= (374-208)/2;
+                    cabezaVuelta = false;
+                    ultimaCabezaDoble = false;
+                }
+            }
+        }
+            if(fichaDobleCabeza)
+            fichaAnteriorDobleCabeza = true;
+        else
+            fichaAnteriorDobleCabeza = false;
+    }
+
+
+}
+function component(pieza, width, height, imag, x, y, type, jugable, rotar) {
+    
+    this.pieza = pieza; // nombre: de la pieza 00, 66 , pos: en el array de imagenes
+    this.width = width;//*escala;
+    this.height = height;//*escala;
+    this.Image = imag;   // imagen de la pieza;
+    this.type = type;
+    /*
+    if (type == "image") {
+        this.image = new Image();
+        this.image.src = color;
+    }
+    */
+    this.valor1 = pieza[0];
+    this.valor2 = pieza[1];
+    this.x = x;
+    this.y = y; 
+    this.jugable = jugable;
+    this.rotar = rotar;
+    
+    this.update = function() {
+        //var ctx = canvasGame.getContext('2d');
+        if(this.jugable>0){
+            // ctxOffscreen.fillStyle = "red";
+            // ctxOffscreen.fillRect(this.x-2, this.y-2, this.width+4, this.height+4);
+            // dibujar el numero jugable arriba de la pieza
+            // ctxOffscreen.font = escalaPieza*100+'px Arial';
+            // ctxOffscreen.fillText(this.jugable.toString(), this.x + this.width/4, this.y-50*escalaPieza);
+        }
+        else
+            this.jugable=0;
+        if(this.rotar == 1){
+            ctxOffscreen.translate(this.x+this.width/2, this.y+this.height/2);
+            ctxOffscreen.rotate(pi);
+            ctxOffscreen.drawImage(this.Image, -this.width/2, -this.height/2, this.width, this.height);
+         }    
+        if(this.rotar == 1){
+            ctxOffscreen.rotate(-pi);
+            ctxOffscreen.translate(-this.x-this.width/2, -this.y-this.height/2);
+            this.rotar == 0;
+        }
+        else
+            ctxOffscreen.drawImage(this.Image, this.x, this.y, this.width, this.height);
+        
+    }
+}
+
+
+function updateGameArea() {
+    //myGameArea.clear();
+    // myGamePiece.newPos();
+    myGameBoard.update();
+    //myGamePiece.update();
+    //i=0;
+    for(let i = 0; i < 4; i++)
+        for(let j = 0; j < myGamePieza[i].length; j++)
+           myGamePieza[i][j].update();
+}
+
+//startGame();
+
+
+</script>
+</body>
+</html>
